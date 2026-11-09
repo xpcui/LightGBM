@@ -1,0 +1,30 @@
+# Python virtual environments
+.venv/
+.venv_test/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# Mac and VS Code
+.DS_Store
+.vscode/
+
+# Research datasets
+*.h5ad
+*.h5
+
+# Saved models
+saved_models/
+example_saved_models/
+*.pkl
+
+# Temporary files
+*.log
