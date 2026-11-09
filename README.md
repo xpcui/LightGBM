@@ -23,6 +23,85 @@ python -m pip install -e .
 - Evaluate predictions using Pearson correlation and RMSE.
 - Visualize predicted cell-type abundance in spatial transcriptomics data.
 
+## Example: Running LEDC on Synthetic Data
+
+A reproducible demonstration is provided in [`examples/demo_ledc.py`](examples/demo_ledc.py). This example illustrates the complete LEDC workflow using simulated single-cell RNA-seq data with three cell types: B cells, T cells, and macrophages.
+
+The demo generates pseudobulk mixtures, trains independent LightGBM models for cell-type count prediction, and evaluates the predictions on held-out synthetic samples.
+
+### Run the demo
+
+After installing LEDC, run the following command from the repository root:
+
+```bash
+python examples/demo_ledc.py
+```
+
+### Example code
+
+```python
+from ledc import LEDC, generate_pseudobulk, evaluate_predictions
+import numpy as np
+import pandas as pd
+
+# adata: simulated AnnData containing raw counts and cell-type labels
+# cell_types: ["B cell", "T cell", "Macrophage"]
+
+T_train, C_train, _ = generate_pseudobulk(
+    adata,
+    n_samples=200,
+    cell_types=cell_types,
+    rng=np.random.default_rng(42),
+    mode="count"
+)
+
+X_train = pd.DataFrame(T_train.toarray(), columns=adata.var_names)
+
+# Train LEDC
+model = LEDC(target="count", n_estimators=100)
+model.fit(X_train, C_train)
+
+# Predict on a separately generated test mixture dataset
+predictions = model.predict(X_test)
+
+# Evaluate predictions
+scores = evaluate_predictions(C_test, predictions)
+print(scores.round(3))
+```
+
+The complete script includes the creation of `adata`, `X_test`, and `C_test`.
+
+### Example output
+
+**Predicted cell-type counts (first five samples):**
+
+| Sample | B cell | T cell | Macrophage |
+|---|---:|---:|---:|
+| 0 | 2.94 | 3.53 | 0.41 |
+| 1 | 4.14 | 6.58 | 1.13 |
+| 2 | 4.74 | 0.45 | 9.35 |
+| 3 | 0.03 | 9.65 | 0.25 |
+| 4 | 1.93 | 2.66 | 3.23 |
+
+**Prediction performance:**
+
+| Cell type | Pearson | RMSE |
+|---|---:|---:|
+| B cell | 0.978 | 0.481 |
+| T cell | 0.984 | 0.456 |
+| Macrophage | 0.978 | 0.805 |
+| Mean by sample | 0.993 | 0.452 |
+
+### Visualization
+
+The figure compares predicted and true cell-type counts for each cell type. The dashed line represents perfect agreement.
+
+![LEDC demo prediction results](examples/demo_output.png)
+
+*Note: The example uses synthetic data and is intended to demonstrate package functionality, not biological generalization. Training and test mixtures are generated separately from the same underlying single-cell reference.*
+
+For the complete executable example, see [`examples/demo_ledc.py`](examples/demo_ledc.py).
+
 ## Quick start
 
 ### 1. Generate pseudobulk training data
