@@ -9,12 +9,10 @@ LEDC trains independent LightGBM regression models for each cell type using pseu
 Clone the repository and install LEDC:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/LEDC.git
+git clone https://github.com/yijiaxue1202/LEDC
 cd LEDC
 python -m pip install -e .
 ```
-
-Replace `YOUR_USERNAME` with the actual GitHub account name after publication.
 
 ## Main features
 
