@@ -32,4 +32,11 @@ __all__ = [
     "sample_summary",
     "evaluate_predictions",
     "plot_spatial",
+    "generate_fold_pseudobulk",
+    "generate_full_pseudobulk"
 ]
+
+from .workflows import (
+    generate_fold_pseudobulk,
+    generate_full_pseudobulk,
+)
