@@ -10,11 +10,16 @@ def safe_pearson(x, y):
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
 
-    if len(x) < 2 or np.std(x) == 0 or np.std(y) == 0:
+    if len(x) < 2:
+        return np.nan
+
+    if np.allclose(x, x[0], rtol=1e-12, atol=1e-14):
+        return np.nan
+
+    if np.allclose(y, y[0], rtol=1e-12, atol=1e-14):
         return np.nan
 
     return pearsonr(x, y).statistic
-
 
 def evaluate_predictions(y_true, y_pred):
     """
