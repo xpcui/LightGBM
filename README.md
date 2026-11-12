@@ -246,6 +246,19 @@ By default, all training genes must be present. Set `missing_genes="zero"` to ex
 **Note:** Expression preprocessing should be compatible with the training data.
 
 
+#### Prediction parameters
+
+The `predict()` and `predict_adata()` methods provide options for controlling gene alignment, normalization, and batch prediction.
+
+| Method | Parameter | Default | Description |
+|---|---|---|---|
+| `predict()` | `normalize` | `False` | If `True`, normalize predicted proportions to sum to one. Only supported when `target="proportion"`. |
+| `predict()` | `missing_genes` | `"error"` | Raise an error if training genes are missing. Use `"zero"` to fill missing genes with zeros. |
+| `predict_adata()` | `gene_id_column` | `None` | Use `adata.var_names` by default, or specify a column in `adata.var` containing gene IDs. |
+| `predict_adata()` | `batch_size` | `128` | Number of samples or spatial spots processed per batch. |
+| `predict_adata()` | `missing_genes` | `"error"` | Raise an error for missing training genes, or use `"zero"` to fill them with zeros. |
+
+
 ### 4. Save and load trained models
 
 ```python
