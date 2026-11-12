@@ -340,14 +340,10 @@ predictions = model.predict_adata(
 # Load spatial coordinates
 positions = pd.read_csv("tissue_positions.csv")
 
-# Select cell types for visualization
-selected_types = predictions.columns[:8].tolist()
-
 # Plot predicted cell-type abundances
 fig = plot_spatial(
     predictions=predictions,
     coordinates=positions,
-    cell_types=selected_types,
     ncols=4,
     cmap="viridis",
     scale="individual",
@@ -375,12 +371,42 @@ The `scale` parameter supports:
 
 Users may also specify individual cell types, change the colormap, filter tissue spots, or provide a histology background image with an appropriate coordinate transformation.
 
+### Run spatial prediction from the command line
+
+LEDC provides a command-line example for applying trained models to spatial transcriptomics data.
+
+```bash
+python examples/predict_lymph.py \
+  --adata visium_data.h5ad \
+  --coordinates tissue_positions.csv \
+  --models saved_models \
+  --output results \
+  --gene-id-column gene_ids
+```
+
+By default, the script generates spatial maps for **all predicted cell types**. Users can optionally select specific cell types using `--cell-types`.
+
+For example, to plot only B cells and T cells:
+
+```bash
+python examples/predict_lymph.py \
+  --adata visium_data.h5ad \
+  --coordinates tissue_positions.csv \
+  --models saved_models \
+  --output results \
+  --gene-id-column gene_ids \
+  --cell-types "B cell" "T cell"
+```
+
+Other options include `--scale`, `--cmap`, `--spot-size`, and `--ncols`. Run `python examples/predict_lymph.py --help` for the complete list.
+
+The script saves predicted cell-type abundances to `spatial_predictions.csv` and spatial maps to `spatial_maps.png` in the specified output directory.
 
 ### Example: Human lymph-node Visium data
 
 The figure below illustrates the application of LEDC to a human lymph-node Visium dataset. Using trained LightGBM models, LEDC predicts cell-type abundances for 4,015 spatial spots across 39 cell types.
 
-Eight cell types are shown to demonstrate the spatial distribution of predicted abundances across the tissue.
+Eight cell types are shown to demonstrate the spatial distribution of predicted abundances across the tissue. The complete LEDC workflow supports visualization of all 39 predicted cell types; eight representative panels are displayed here for readability.
 
 ![LEDC spatial predictions for human lymph-node Visium data](examples/lymph_spatial_predictions.png)
 
