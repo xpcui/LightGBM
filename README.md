@@ -136,6 +136,23 @@ The function returns:
 - `C`: cell-type counts (samples × cell types)
 - `P`: cell-type proportions (samples × cell types)
 
+#### Pseudobulk generation parameters
+
+The `generate_pseudobulk()` function generates pseudobulk mixtures from annotated single-cell RNA-seq data. It supports simulations with either fixed or variable total cell counts.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `adata` | Required | AnnData object containing single-cell expression and cell-type annotations. |
+| `n_samples` | Required | Number of pseudobulk mixtures to generate. |
+| `cell_types` | Required | Cell types included in the mixtures. |
+| `rng` | Required | NumPy random number generator for reproducibility. |
+| `mode` | `"proportion"` | `"proportion"` uses a fixed number of cells; `"count"` uses variable cell counts. |
+| `pb_cells` | `10` | Number of cells per mixture when `mode="proportion"`. |
+| `poisson_mean` | `10` | Mean of the Poisson distribution determining total cell counts when `mode="count"`. |
+| `alpha` | `1.0` | Concentration parameter for the Dirichlet distribution used to generate cell-type mixing weights. |
+
+The function returns three objects: `T` (pseudobulk gene expression), `C` (cell-type counts), and `P` (cell-type proportions).
+
 The DataFrame conversion shown above is suitable for small datasets. Large datasets may require a memory-efficient sparse workflow.
 
 ### 2. Train LEDC
@@ -147,7 +164,42 @@ model = LEDC(target="count")
 model.fit(X_train, Y_train)
 ```
 
-LEDC trains a separate LightGBM regression model for each cell type.
+#### LEDC model parameters
+
+LEDC fits an independent LightGBM regression model for each cell type. The number of boosting rounds is selected through cross-validation with early stopping.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `target` | `"count"` | Prediction target: `"count"` or `"proportion"`. |
+| `n_estimators` | `200` | Maximum number of boosting rounds. |
+| `learning_rate` | `0.1` | Learning rate for boosting. |
+| `num_leaves` | `31` | Maximum number of leaves per tree. |
+| `random_state` | `42` | Random seed for reproducibility. |
+| `n_jobs` | `1` | Number of threads used for LightGBM computations. |
+| `nfold` | `3` | Number of cross-validation folds. |
+| `early_stopping_rounds` | `20` | Number of rounds without sufficient validation improvement before stopping. |
+| `min_delta` | `0.0001` | Minimum improvement required for early stopping. |
+| `verbose` | `False` | Whether to display training progress. |
+
+Example:
+
+```python
+from ledc import LEDC
+
+model = LEDC(
+    target="count",
+    n_estimators=200,
+    learning_rate=0.1,
+    nfold=3,
+    random_state=42
+)
+
+model.fit(X_train, C_train)
+
+predictions = model.predict(X_test)
+```
+
+For proportion prediction, initialize the model with `target="proportion"` and train it using the cell-type proportion matrix `P_train`. Predictions can optionally be normalized to sum to one using `model.predict(X_test, normalize=True)`.
 
 ### 3. Predict cell-type abundance
 
@@ -236,6 +288,31 @@ fig = plot_spatial(
 ```
 
 The spatial positions DataFrame must contain `pxl_col_in_fullres` and `pxl_row_in_fullres`. The optional `in_tissue` column identifies tissue spots. Spot indices should match prediction indices.
+
+### Spatial plotting parameters
+
+The `plot_spatial()` function allows users to customize the visualization of predicted cell-type abundances.
+
+| Parameter | Default | Description / Available options |
+|---|---|---|
+| `predictions` | Required | DataFrame containing predicted abundances (spots × cell types). |
+| `coordinates` | Required | DataFrame containing spatial coordinates and spot barcodes. |
+| `cell_types` | `None` | List of cell types to display. `None` plots all cell types. |
+| `ncols` | `4` | Number of subplot columns. Rows are determined automatically. |
+| `cmap` | `"viridis"` | Matplotlib colormap, such as `"viridis"`, `"plasma"`, or `"jet"`. |
+| `scale` | `"individual"` | `"individual"` uses separate color scales; `"shared"` uses one common scale. |
+| `vmax` | `"quantile"` | `"quantile"`, `"max"`, or a numeric upper limit. |
+| `quantile` | `0.99` | Quantile used when `vmax="quantile"`. |
+| `tissue_only` | `True` | If available, display only spots where `in_tissue == 1`. |
+| `spot_size` | `10` | Size of the plotted spatial markers. |
+| `figsize` | `None` | Optional figure size `(width, height)` in inches. |
+| `image` | `None` | Optional H&E tissue image displayed in the background. |
+| `image_extent` | `None` | Image boundaries in the same coordinate system as the spots. Required when using `image`. |
+| `image_alpha` | `0.6` | Background image opacity, from 0 to 1. |
+| `show` | `False` | Whether to display the figure. |
+| `save_path` | `None` | Optional output path for saving the figure. |
+
+The function returns a Matplotlib `Figure`, allowing further customization or saving with `fig.savefig()`.
 
 ### Example: Spatial deconvolution with LEDC
 
