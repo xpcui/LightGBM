@@ -158,6 +158,42 @@ print(predictions.head())
 
 `X_test` must contain compatible expression measurements and the training genes. LEDC aligns gene columns to the training order.
 
+### Predict directly from AnnData
+
+LEDC also supports prediction from AnnData objects, commonly used for single-cell RNA-seq and spatial transcriptomics datasets.
+
+The `predict_adata()` method automatically aligns genes with the training data, handles sparse expression matrices, and performs predictions in batches.
+
+```python
+import anndata as ad
+from ledc import LEDC
+
+# Load spatial expression data
+adata = ad.read_h5ad("spatial_data.h5ad")
+
+# Load trained LEDC models
+model = LEDC.load("saved_models")
+
+# Predict cell-type abundances
+predictions = model.predict_adata(
+    adata,
+    gene_id_column="gene_ids",
+    batch_size=128,
+    missing_genes="error"
+)
+
+print(predictions.head())
+```
+
+The resulting DataFrame contains samples or spatial spots as rows and predicted cell types as columns. Sample identifiers from `adata.obs_names` are preserved.
+
+The `gene_id_column` argument specifies the column in `adata.var` containing gene identifiers. If omitted, LEDC uses `adata.var_names`.
+
+By default, all training genes must be present. Set `missing_genes="zero"` to explicitly fill missing training genes with zeros.
+
+**Note:** Expression preprocessing should be compatible with the training data.
+
+
 ### 4. Save and load trained models
 
 ```python
@@ -185,14 +221,84 @@ from ledc import plot_spatial
 
 fig = plot_spatial(
     predictions=predictions,
-    positions=spatial_positions,
+    coordinates=spatial_positions,
     cell_types=["B cell", "T cell"],
-    shared_scale=True,
-    save_path="spatial_maps.png"
+    ncols=2,
+    cmap="viridis",
+    scale="shared",
+    vmax="max",
+    tissue_only=True,
+    spot_size=13,
+    save_path="spatial_maps.png",
+    show=False,
 )
+
 ```
 
 The spatial positions DataFrame must contain `pxl_col_in_fullres` and `pxl_row_in_fullres`. The optional `in_tissue` column identifies tissue spots. Spot indices should match prediction indices.
+
+### Example: Spatial deconvolution with LEDC
+
+Once LEDC models have been trained, they can be applied to spatial transcriptomics data to estimate cell-type abundances across tissue locations.
+
+```python
+import anndata as ad
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from ledc import LEDC, plot_spatial
+
+# Load trained models
+model = LEDC.load("saved_models")
+
+# Load spatial gene expression
+adata = ad.read_h5ad("visium_data.h5ad")
+
+# Predict cell-type abundances
+predictions = model.predict_adata(
+    adata,
+    gene_id_column="gene_ids"
+)
+
+# Load spatial coordinates
+positions = pd.read_csv("tissue_positions.csv")
+
+# Select cell types for visualization
+selected_types = predictions.columns[:8].tolist()
+
+# Plot predicted cell-type abundances
+fig = plot_spatial(
+    predictions=predictions,
+    coordinates=positions,
+    cell_types=selected_types,
+    ncols=4,
+    cmap="viridis",
+    scale="individual",
+    vmax="quantile",
+    quantile=0.99,
+    tissue_only=True,
+    spot_size=20
+)
+
+fig.savefig(
+    "spatial_predictions.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.close(fig)
+```
+
+The spatial coordinate table should contain spot barcodes and the columns `pxl_col_in_fullres` and `pxl_row_in_fullres`. LEDC aligns predictions and coordinates using their spot identifiers.
+
+The `scale` parameter supports:
+
+- `"individual"`: separate color ranges for each cell type.
+- `"shared"`: a common color range for comparing predicted abundances between cell types.
+
+Users may also specify individual cell types, change the colormap, filter tissue spots, or provide a histology background image with an appropriate coordinate transformation.
+
+A complete application using a human lymph-node Visium dataset is provided in [`examples/predict_lymph.py`](examples/predict_lymph.py). This example requires separately obtained data and trained model files.
 
 ## Input data requirements
 

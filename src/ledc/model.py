@@ -87,6 +87,101 @@ class LEDC:
             totals = preds.sum(axis=1, keepdims=True)
             preds = np.divide(preds, totals, out=np.zeros_like(preds), where=totals > 0)
         return pd.DataFrame(preds, index=X.index, columns=self.cell_types_)
+    
+    def predict_adata(
+        self,
+        adata,
+        gene_id_column=None,
+        batch_size=128,
+        missing_genes="error",
+    ):
+        """
+        Predict cell-type abundances from an AnnData object.
+
+        Parameters
+        ----------
+        adata : AnnData
+            Expression matrix (samples/spots x genes).
+        gene_id_column : str or None
+            Column in adata.var containing gene IDs.
+            If None, use adata.var_names.
+        batch_size : int
+            Number of samples processed per batch.
+        missing_genes : str
+            How to handle missing training genes.
+
+        Returns
+        -------
+        pd.DataFrame
+            Predicted abundances (samples x cell types).
+        """
+        import numpy as np
+        import pandas as pd
+        from scipy import sparse
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
+
+        # Select gene identifiers
+        if gene_id_column is None:
+            gene_ids = adata.var_names.astype(str)
+        else:
+            if gene_id_column not in adata.var:
+                raise ValueError(
+                    f"Column '{gene_id_column}' not found in adata.var"
+                )
+            gene_ids = adata.var[gene_id_column].astype(str)
+
+        if pd.Index(gene_ids).has_duplicates:
+            raise ValueError("Duplicate gene identifiers found")
+
+        if not adata.obs_names.is_unique:
+            raise ValueError("Duplicate sample identifiers found")
+
+        # Match genes used for training
+        training_genes = list(self.genes_)
+        gene_index = pd.Index(gene_ids)
+        missing = set(training_genes) - set(gene_index)
+
+        if missing and missing_genes != "zero":
+            raise ValueError(
+                f"{len(missing)} training genes are missing"
+            )
+
+        # Find positions of training genes in AnnData
+        indices = gene_index.get_indexer(training_genes)
+        available = indices >= 0
+
+        predictions = []
+
+        # Predict in batches
+        for start in range(0, adata.n_obs, batch_size):
+            end = min(start + batch_size, adata.n_obs)
+
+            X = np.zeros(
+                (end - start, len(training_genes)),
+                dtype=np.float32
+            )
+
+            if available.any():
+                X_part = adata.X[start:end, indices[available]]
+
+                if sparse.issparse(X_part):
+                    X_part = X_part.toarray()
+
+                X[:, available] = np.asarray(X_part)
+
+            X = pd.DataFrame(
+                X,
+                index=adata.obs_names[start:end],
+                columns=training_genes
+            )
+
+            batch_pred = self.predict(X)
+            predictions.append(batch_pred)
+
+        return pd.concat(predictions)
+
 
     def save(self, path):
         if self.models_ is None:

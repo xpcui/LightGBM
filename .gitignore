@@ -28,3 +28,17 @@ example_saved_models/
 
 # Temporary files
 *.log
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Local environment variables
+.env
+.env.*
+
+# Research data and generated outputs
+data/
+results/
+outputs/
+*.npz
+*.npy

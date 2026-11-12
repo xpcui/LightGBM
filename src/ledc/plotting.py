@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 
-def plot_spatial(
+def plot_spatial_legacy(
     predictions,
     positions,
     cell_types=None,
@@ -294,6 +294,295 @@ def plot_spatial(
             bbox_inches="tight"
         )
 
+    if show:
+        plt.show()
+
+    return fig
+
+
+
+import math
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+
+def plot_spatial(
+    predictions,
+    coordinates,
+    cell_types=None,
+    ncols=4,
+    cmap="viridis",
+    scale="individual",
+    vmax="quantile",
+    quantile=0.99,
+    tissue_only=True,
+    spot_size=10,
+    figsize=None,
+    image=None,
+    image_extent=None,
+    image_alpha=0.6,
+    show=False,
+    save_path=None,
+):
+    """
+    Plot predicted cell-type abundances on spatial coordinates.
+
+    Parameters
+    ----------
+    predictions : pd.DataFrame
+        Spots x cell types, indexed by spot barcode.
+    coordinates : pd.DataFrame
+        Spatial coordinates, indexed by barcode or containing
+        a 'barcode' column. Requires pxl_col_in_fullres and
+        pxl_row_in_fullres.
+    cell_types : list or None
+        Cell types to display. None plots all cell types.
+    ncols : int
+        Number of subplot columns.
+    cmap : str
+        Matplotlib colormap.
+    scale : {'individual', 'shared'}
+        Use separate or common color limits.
+    vmax : {'quantile', 'max'} or number
+        Upper color limit.
+    quantile : float
+        Quantile used when vmax='quantile'.
+    tissue_only : bool
+        Keep spots with in_tissue == 1 when available.
+    spot_size : float
+        Marker size.
+    figsize : tuple or None
+        Figure dimensions.
+    image : array-like or None
+        Optional histology image.
+    image_extent : tuple or None
+        Image extent (xmin, xmax, ymin, ymax) in
+        the same coordinate system as the spots.
+    image_alpha : float
+        Histology image opacity.
+    show : bool
+        Whether to display the figure. Default is False.
+    save_path : str or pathlib.Path or None
+        Optional path to save the figure.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+
+    # 1. Validate inputs
+    if not isinstance(predictions, pd.DataFrame):
+        raise TypeError("predictions must be a DataFrame")
+
+    if not isinstance(coordinates, pd.DataFrame):
+        raise TypeError("coordinates must be a DataFrame")
+
+    if predictions.index.has_duplicates:
+        raise ValueError("Duplicate spot IDs in predictions")
+
+    if predictions.columns.has_duplicates:
+        raise ValueError("Duplicate cell-type names")
+
+    if ncols < 1:
+        raise ValueError("ncols must be at least 1")
+
+    if scale not in ("individual", "shared"):
+        raise ValueError("scale must be 'individual' or 'shared'")
+
+    if isinstance(vmax, str) and vmax not in ("quantile", "max"):
+        raise ValueError("vmax must be 'quantile', 'max', or a number")
+
+    if not 0 < quantile <= 1:
+        raise ValueError("quantile must be between 0 and 1")
+
+    if not 0 <= image_alpha <= 1:
+        raise ValueError("image_alpha must be between 0 and 1")
+
+    if image is not None and image_extent is None:
+        raise ValueError(
+            "image_extent is required when providing an image"
+        )
+
+    # 2. Select cell types
+    if cell_types is None:
+        cell_types = predictions.columns.tolist()
+    else:
+        cell_types = list(cell_types)
+
+    if not cell_types:
+        raise ValueError("No cell types selected")
+
+    missing_types = set(cell_types) - set(predictions.columns)
+    if missing_types:
+        raise ValueError(f"Unknown cell types: {sorted(missing_types)}")
+
+    # 3. Align spots by barcode
+    pos = coordinates.copy()
+
+    if "barcode" in pos.columns:
+        pos = pos.set_index("barcode")
+
+    if pos.index.has_duplicates:
+        raise ValueError("Duplicate spot IDs in coordinates")
+
+    if isinstance(predictions.index, pd.RangeIndex):
+        raise ValueError(
+            "Predictions must be indexed by spot barcodes"
+        )
+
+    required = ["pxl_col_in_fullres", "pxl_row_in_fullres"]
+    missing_columns = set(required) - set(pos.columns)
+
+    if missing_columns:
+        raise ValueError(
+            f"Missing coordinate columns: {sorted(missing_columns)}"
+        )
+
+    missing_spots = predictions.index.difference(pos.index)
+    if len(missing_spots) > 0:
+        raise ValueError(
+            f"{len(missing_spots)} predicted spots have no coordinates"
+        )
+
+    pos = pos.reindex(predictions.index)
+    pred = predictions.loc[:, cell_types].copy()
+
+    # 4. Optionally filter tissue spots
+    if tissue_only and "in_tissue" in pos.columns:
+        keep = pd.to_numeric(
+            pos["in_tissue"], errors="coerce"
+        ).eq(1)
+
+        pos = pos.loc[keep]
+        pred = pred.loc[keep]
+
+    if pred.empty:
+        raise ValueError("No spots remain after filtering")
+
+    # 5. Extract coordinates and prediction values
+    x = pd.to_numeric(
+        pos["pxl_col_in_fullres"], errors="coerce"
+    ).to_numpy()
+
+    y = pd.to_numeric(
+        pos["pxl_row_in_fullres"], errors="coerce"
+    ).to_numpy()
+
+    values = pred.to_numpy(dtype=float)
+
+    if not np.isfinite(x).all() or not np.isfinite(y).all():
+        raise ValueError("Coordinates must be finite numbers")
+
+    if not np.isfinite(values).all():
+        raise ValueError("Predictions contain NaN or infinity")
+
+    # 6. Determine color limits
+    def get_vmax(v):
+        if isinstance(vmax, str):
+            if vmax == "quantile":
+                upper = np.quantile(v, quantile)
+            else:
+                upper = np.max(v)
+        else:
+            upper = float(vmax)
+
+        if not np.isfinite(upper):
+            raise ValueError("vmax must be finite")
+
+        return max(float(upper), 1e-12)
+
+    if scale == "shared":
+        shared_vmax = get_vmax(values)
+
+    # 7. Create subplot layout
+    n = len(cell_types)
+    ncols_used = min(ncols, n)
+    nrows = math.ceil(n / ncols_used)
+
+    if figsize is None:
+        figsize = (4.5 * ncols_used, 4.5 * nrows)
+
+    fig, axes = plt.subplots(
+        nrows,
+        ncols_used,
+        figsize=figsize,
+        squeeze=False,
+        constrained_layout=True
+    )
+
+    axes = axes.ravel()
+    scatter_plots = []
+
+    # 8. Plot each cell type
+    for i, cell_type in enumerate(cell_types):
+        ax = axes[i]
+        v = values[:, i]
+
+        upper = (
+            shared_vmax
+            if scale == "shared"
+            else get_vmax(v)
+        )
+
+        # Optional H&E background
+        if image is not None:
+            ax.imshow(
+                image,
+                extent=image_extent,
+                origin="upper",
+                alpha=image_alpha
+            )
+
+        sc = ax.scatter(
+            x,
+            y,
+            c=v,
+            s=spot_size,
+            cmap=cmap,
+            vmin=0,
+            vmax=upper,
+            edgecolors="none",
+            rasterized=True
+        )
+
+        scatter_plots.append(sc)
+
+        ax.set_title(cell_type, fontsize=10)
+        ax.set_aspect("equal")
+        ax.invert_yaxis()
+        ax.axis("off")
+
+        if scale == "individual":
+            fig.colorbar(
+                sc,
+                ax=ax,
+                shrink=0.7
+            )
+
+    # 9. Hide unused subplots
+    for ax in axes[n:]:
+        ax.set_visible(False)
+
+    # 10. Shared colorbar
+    if scale == "shared":
+        fig.colorbar(
+            scatter_plots[0],
+            ax=list(axes[:n]),
+            shrink=0.7,
+            label="Predicted abundance"
+        )
+
+    # Save the figure if requested
+    if save_path is not None:
+        fig.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+    # Display the figure if requested
     if show:
         plt.show()
 
