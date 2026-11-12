@@ -298,8 +298,16 @@ The `scale` parameter supports:
 
 Users may also specify individual cell types, change the colormap, filter tissue spots, or provide a histology background image with an appropriate coordinate transformation.
 
-A complete application using a human lymph-node Visium dataset is provided in [`examples/predict_lymph.py`](examples/predict_lymph.py). This example requires separately obtained data and trained model files.
 
+### Example: Human lymph-node Visium data
+
+The figure below illustrates the application of LEDC to a human lymph-node Visium dataset. Using trained LightGBM models, LEDC predicts cell-type abundances for 4,015 spatial spots across 39 cell types.
+
+Eight cell types are shown to demonstrate the spatial distribution of predicted abundances across the tissue.
+
+![LEDC spatial predictions for human lymph-node Visium data](examples/lymph_spatial_predictions.png)
+
+A complete application using a human lymph-node Visium dataset is provided in [`examples/predict_lymph.py`](examples/predict_lymph.py). This example requires separately obtained data and trained model files.
 ## Input data requirements
 
 LEDC expects gene-expression matrices with samples or spatial spots as rows and genes as columns. Training targets contain cell-type counts or proportions, with one column per cell type.
