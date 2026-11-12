@@ -146,7 +146,7 @@ The `generate_pseudobulk()` function generates pseudobulk mixtures from annotate
 | `n_samples` | Required | Number of pseudobulk mixtures to generate. |
 | `cell_types` | Required | Cell types included in the mixtures. |
 | `rng` | Required | NumPy random number generator for reproducibility. |
-| `mode` | `"proportion"` | `"proportion"` uses a fixed number of cells; `"count"` uses variable cell counts. |
+| `mode` | `"count"` | `"count"` generates variable-size mixtures; `"proportion"` generates fixed-size mixtures. |
 | `pb_cells` | `10` | Number of cells per mixture when `mode="proportion"`. |
 | `poisson_mean` | `10` | Mean of the Poisson distribution determining total cell counts when `mode="count"`. |
 | `alpha` | `1.0` | Concentration parameter for the Dirichlet distribution used to generate cell-type mixing weights. |

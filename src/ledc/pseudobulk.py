@@ -10,7 +10,7 @@ def generate_pseudobulk(
     n_samples,
     cell_types,
     rng,
-    mode="proportion",
+    mode="count",
     pb_cells=10,
     poisson_mean=10,
     alpha=1.0
