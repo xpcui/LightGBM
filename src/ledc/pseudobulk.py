@@ -34,10 +34,12 @@ def generate_pseudobulk(
     rng : numpy.random.Generator
         Random number generator for reproducibility.
 
-    mode : {"proportion", "count"}
-        "proportion": fixed number of cells per pseudobulk sample.
-        "count": Poisson-distributed number of cells per sample,
-        with a minimum of one cell.
+    mode : {"count", "proportion"}, default="count"
+        "count": Poisson-distributed total cells per sample,
+        with a minimum of one cell. P contains cell counts.
+
+        "proportion": fixed total cells per sample.
+        P contains realized cell-type proportions.
 
     pb_cells : int, default=10
         Number of cells per sample in proportion mode.
@@ -57,7 +59,10 @@ def generate_pseudobulk(
         True cell counts (samples x cell types).
 
     P : pandas.DataFrame
-        True cell proportions (samples x cell types).
+        Cell-type prediction targets (samples x cell types).
+        In count mode, P equals C and contains absolute
+        cell counts. In proportion mode, P contains the
+        realized cell-type proportions, C / row_sum(C).
     """
 
     # --------------------------------------------------
@@ -198,13 +203,14 @@ def generate_pseudobulk(
         # Store gene expression
         T_rows.append(bulk_row)
 
-        # Store true cell counts
-        C_rows.append(counts)
+        # Store actual cell-type counts
+        C_rows.append(counts.copy())
 
-        # Store true cell proportions
-        P_rows.append(
-            counts / counts.sum()
-        )
+        # Define the target P based on mode
+        if mode == "count":
+            P_rows.append(counts.copy())
+        else: # mode == "proportion"
+            P_rows.append(counts / counts.sum())
 
     # --------------------------------------------------
     # 6. Combine generated samples

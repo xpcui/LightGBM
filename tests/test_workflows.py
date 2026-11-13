@@ -51,12 +51,11 @@ def test_fold_generation(tmp_path):
     assert C.shape == (10, 2)
     assert P.shape == (10, 2)
 
-    assert np.allclose(P.sum(axis=1), 1)
+    # In count mode, P contains cell counts
+    pd.testing.assert_frame_equal(P, C)
 
-    assert np.allclose(
-        C.div(C.sum(axis=1), axis=0),
-        P
-    )
+    # Each sample contains at least one cell
+    assert (P.sum(axis=1) >= 1).all()
 
 
 def test_full_generation(tmp_path):

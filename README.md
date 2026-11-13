@@ -47,7 +47,7 @@ import pandas as pd
 # adata: simulated AnnData containing raw counts and cell-type labels
 # cell_types: ["B cell", "T cell", "Macrophage"]
 
-T_train, C_train, _ = generate_pseudobulk(
+T_train, C_train, P_train = generate_pseudobulk(
     adata,
     n_samples=200,
     cell_types=cell_types,
@@ -59,7 +59,7 @@ X_train = pd.DataFrame(T_train.toarray(), columns=adata.var_names)
 
 # Train LEDC
 model = LEDC(target="count", n_estimators=100)
-model.fit(X_train, C_train)
+model.fit(X_train, P_train)
 
 # Predict on a separately generated test mixture dataset
 predictions = model.predict(X_test)
@@ -127,14 +127,31 @@ X_train = pd.DataFrame(
     columns=adata.var_names
 )
 
-Y_train = C
+# In count mode, P is identical to C
+Y_train = P
 ```
 
-The function returns:
+The function returns three matrices:
 
-- `T`: pseudobulk gene expression (samples × genes)
-- `C`: cell-type counts (samples × cell types)
-- `P`: cell-type proportions (samples × cell types)
+- `T`: Pseudobulk gene expression (samples × genes).
+- `C`: Actual cell-type counts (samples × cell types).
+- `P`: Cell-type prediction targets (samples × cell types), defined according to the selected mode.
+
+When `mode="count"`, `P` contains absolute cell-type counts and is identical to `C`.
+
+When `mode="proportion"`, `P` contains realized cell-type proportions, calculated by dividing each cell-type count by the total number of sampled cells.
+
+Mathematically,
+
+\[
+P_{ik} =
+\begin{cases}
+C_{ik}, & \text{if mode = count},\\
+\frac{C_{ik}}{\sum_{j=1}^{K} C_{ij}}, & \text{if mode = proportion}.
+\end{cases}
+\]
+
+The default mode is `"count"`, consistent with the count-based deconvolution setting emphasized in the LEDC manuscript.
 
 #### Pseudobulk generation parameters
 
@@ -146,12 +163,12 @@ The `generate_pseudobulk()` function generates pseudobulk mixtures from annotate
 | `n_samples` | Required | Number of pseudobulk mixtures to generate. |
 | `cell_types` | Required | Cell types included in the mixtures. |
 | `rng` | Required | NumPy random number generator for reproducibility. |
-| `mode` | `"count"` | `"count"` generates variable-size mixtures; `"proportion"` generates fixed-size mixtures. |
+| `mode` | `"count"` | `"count"` generates Poisson-distributed total cell counts and sets `P = C`. `"proportion"` uses a fixed number of cells and sets `P = C / row_sum(C)`. |
 | `pb_cells` | `10` | Number of cells per mixture when `mode="proportion"`. |
 | `poisson_mean` | `10` | Mean of the Poisson distribution determining total cell counts when `mode="count"`. |
 | `alpha` | `1.0` | Concentration parameter for the Dirichlet distribution used to generate cell-type mixing weights. |
 
-The function returns three objects: `T` (pseudobulk gene expression), `C` (cell-type counts), and `P` (cell-type proportions).
+The function returns three objects: `T` (pseudobulk gene expression), `C` (actual cell-type counts), and `P` (cell-type prediction targets). In count mode, `P` is identical to `C`. In proportion mode, `P` contains the realized cell-type proportions obtained by normalizing each row of `C`.
 
 The DataFrame conversion shown above is suitable for small datasets. Large datasets may require a memory-efficient sparse workflow.
 
@@ -163,6 +180,21 @@ from ledc import LEDC
 model = LEDC(target="count")
 model.fit(X_train, Y_train)
 ```
+The prediction target must match the pseudobulk generation mode. For count-based deconvolution, use `mode="count"` and train the model with the count-valued `P` matrix:
+
+```python
+model = LEDC(target="count")
+model.fit(X_train, P)
+```
+
+For proportion-based deconvolution, generate pseudobulk mixtures using `mode="proportion"` and train with the proportion-valued `P` matrix:
+
+```python
+model = LEDC(target="proportion")
+model.fit(X_train, P)
+```
+
+The `target` argument specifies the outcome type, while the matrix passed to `fit()` supplies the actual training labels.
 
 #### LEDC model parameters
 
