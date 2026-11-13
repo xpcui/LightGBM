@@ -180,6 +180,7 @@ LEDC fits an independent LightGBM regression model for each cell type. The numbe
 | `early_stopping_rounds` | `20` | Number of rounds without sufficient validation improvement before stopping. |
 | `min_delta` | `0.0001` | Minimum improvement required for early stopping. |
 | `verbose` | `False` | Whether to display training progress. |
+| `expression_scale` | `"unknown"` | Training expression representation: `"unknown"`, `"raw_counts"`, `"cpm"`, or `"log_cpm"`. Stored as metadata without transforming the data. |
 
 Example:
 
@@ -231,7 +232,8 @@ predictions = model.predict_adata(
     adata,
     gene_id_column="gene_ids",
     batch_size=128,
-    missing_genes="error"
+    missing_genes="error",
+    validate_scale=True
 )
 
 print(predictions.head())
@@ -257,6 +259,8 @@ The `predict()` and `predict_adata()` methods provide options for controlling ge
 | `predict_adata()` | `gene_id_column` | `None` | Use `adata.var_names` by default, or specify a column in `adata.var` containing gene IDs. |
 | `predict_adata()` | `batch_size` | `128` | Number of samples or spatial spots processed per batch. |
 | `predict_adata()` | `missing_genes` | `"error"` | Raise an error for missing training genes, or use `"zero"` to fill them with zeros. |
+| `predict_adata()` | `validate_scale` | `False` | If `True`, checks input expression values against the model's declared `expression_scale` and warns about potential mismatches. Does not transform the data. |
+
 
 
 ### 4. Save and load trained models

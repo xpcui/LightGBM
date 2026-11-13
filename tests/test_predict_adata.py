@@ -141,3 +141,39 @@ def test_predict_adata_preserves_barcodes(trained_model):
     )
 
     assert predictions.index.tolist() == ["spot_B", "spot_A"]
+
+
+def test_predict_adata_validate_scale(trained_model):
+    trained_model.expression_scale = "raw_counts"
+
+    adata = ad.AnnData(
+        X=np.array([[1.5, 2.0, 3.0, 4.0]]),
+        obs=pd.DataFrame(index=["spot1"]),
+        var=pd.DataFrame(index=["g1", "g2", "g3", "g4"])
+    )
+
+    with pytest.warns(UserWarning, match="non-integer"):
+        predictions = trained_model.predict_adata(
+            adata,
+            validate_scale=True
+        )
+
+    assert predictions.shape == (1, 2)
+
+
+def test_predict_adata_validation_optional(trained_model):
+    trained_model.expression_scale = "raw_counts"
+
+    adata = ad.AnnData(
+        X=np.array([[1.5, 2.0, 3.0, 4.0]]),
+        obs=pd.DataFrame(index=["spot1"]),
+        var=pd.DataFrame(index=["g1", "g2", "g3", "g4"])
+    )
+
+    # No preprocessing-scale warning when validation is disabled
+    predictions = trained_model.predict_adata(
+        adata,
+        validate_scale=False
+    )
+
+    assert predictions.shape == (1, 2)

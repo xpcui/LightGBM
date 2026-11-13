@@ -12,21 +12,41 @@ class LEDC:
     20-round early stopping, RMSE, learning rate 0.1 and 31 leaves).
     X: samples by genes; Y: samples by cell types, matched by row index.
     """
+
     def __init__(self, target="count", n_estimators=200, learning_rate=0.1,
-                 num_leaves=31, random_state=42, n_jobs=1, nfold=3,
-                 early_stopping_rounds=20, min_delta=1e-4, verbose=False):
+                num_leaves=31, random_state=42, n_jobs=1, nfold=3,
+                early_stopping_rounds=20, min_delta=1e-4, verbose=False,
+                expression_scale="unknown"):
+
         if target not in ("count", "proportion"):
             raise ValueError("target must be 'count' or 'proportion'")
+
+        if expression_scale not in ("unknown", "raw_counts", "cpm", "log_cpm"):
+            raise ValueError(
+                "expression_scale must be 'unknown', 'raw_counts', "
+                "'cpm', or 'log_cpm'"
+            )
+
         self.target = target
-        self.params = dict(n_estimators=n_estimators, learning_rate=learning_rate,
-                           num_leaves=num_leaves, random_state=random_state,
-                           n_jobs=n_jobs, nfold=nfold,
-                           early_stopping_rounds=early_stopping_rounds,
-                           min_delta=min_delta, verbose=verbose)
+        self.expression_scale = expression_scale
+
+        self.params = dict(
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            num_leaves=num_leaves,
+            random_state=random_state,
+            n_jobs=n_jobs,
+            nfold=nfold,
+            early_stopping_rounds=early_stopping_rounds,
+            min_delta=min_delta,
+            verbose=verbose
+        )
+
         self.models_ = None
         self.genes_ = None
         self.cell_types_ = None
         self.cv_results_ = None
+
 
     @staticmethod
     def _check_df(value, name):
@@ -94,6 +114,7 @@ class LEDC:
         gene_id_column=None,
         batch_size=128,
         missing_genes="error",
+        validate_scale=False,
     ):
         """
         Predict cell-type abundances from an AnnData object.
@@ -138,6 +159,13 @@ class LEDC:
         if not adata.obs_names.is_unique:
             raise ValueError("Duplicate sample identifiers found")
 
+        if validate_scale:
+            from .preprocessing import validate_expression_scale
+
+            validate_expression_scale(
+                adata.X,
+                expected_scale=self.expression_scale
+            )
         # Match genes used for training
         training_genes = list(self.genes_)
         gene_index = pd.Index(gene_ids)
@@ -188,8 +216,14 @@ class LEDC:
             raise RuntimeError('No models to save')
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
-        metadata = dict(target=self.target, params=self.params, genes=self.genes_,
-                        cell_types=self.cell_types_, cv_results=self.cv_results_)
+        metadata = dict(
+            target=self.target,
+            expression_scale=self.expression_scale,
+            params=self.params,
+            genes=self.genes_,
+            cell_types=self.cell_types_,
+            cv_results=self.cv_results_
+        )
         (path/'metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
         for i, ct in enumerate(self.cell_types_):
             self.models_[ct].save_model(str(path/f'model_{i}.txt'))
@@ -199,9 +233,16 @@ class LEDC:
     def load(cls, path):
         path = Path(path)
         meta = json.loads((path/'metadata.json').read_text(encoding='utf-8'))
-        obj = cls(target=meta['target'], **meta['params'])
-        obj.genes_, obj.cell_types_ = meta['genes'], meta['cell_types']
-        obj.cv_results_ = meta.get('cv_results')
+        obj = cls(
+            target=meta["target"],
+            expression_scale=meta.get("expression_scale", "unknown"),
+            **meta["params"]
+        )
+
+        obj.genes_ = meta["genes"]
+        obj.cell_types_ = meta["cell_types"]
+        obj.cv_results_ = meta.get("cv_results")
+
         obj.models_ = {ct: lgb.Booster(model_file=str(path/f'model_{i}.txt'))
                        for i, ct in enumerate(obj.cell_types_)}
         return obj

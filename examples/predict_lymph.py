@@ -46,6 +46,11 @@ def main():
         default="error",
         help="How to handle missing training genes"
     )
+    parser.add_argument(
+        "--validate-scale",
+        action="store_true",
+        help="Validate expression values against the model's declared scale"
+    )
 
     # Visualization options
     parser.add_argument(
@@ -104,7 +109,8 @@ def main():
         adata,
         gene_id_column=args.gene_id_column,
         batch_size=args.batch_size,
-        missing_genes=args.missing_genes
+        missing_genes=args.missing_genes,
+        validate_scale=args.validate_scale
     )
 
     print("Prediction shape:", predictions.shape)
