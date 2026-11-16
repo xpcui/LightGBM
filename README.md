@@ -23,11 +23,180 @@ python -m pip install -e .
 - Evaluate predictions using Pearson correlation and RMSE.
 - Visualize predicted cell-type abundance in spatial transcriptomics data.
 
+## Input and Output
+
+LEDC is a supervised deconvolution package for estimating cell-type abundance from bulk RNA-seq or spatial transcriptomics data. The workflow consists of three main steps: generating pseudobulk training data, training cell-type-specific LightGBM models, and predicting cell-type abundance in new samples.
+
+### Workflow overview
+
+| Step | User input | LEDC output |
+|---|---|---|
+| 1. Pseudobulk generation | Annotated scRNA-seq reference data | Synthetic expression matrix (`T`), cell-count matrix (`C`), and prediction targets (`P`) |
+| 2. Model training | Gene-expression matrix (`X_train`) and known cell-type targets (`Y_train`) | Trained LightGBM regression models, one per cell type |
+| 3. Prediction | Gene-expression matrix from new bulk samples or spatial spots (`X_new`) | Predicted cell-type counts or proportions for each sample |
+
+Users who already have labeled training data can skip pseudobulk generation and train LEDC directly using their own expression and cell-type abundance matrices.
+
+Once a model has been trained, it can be applied to new datasets without requiring the original single-cell reference again, provided that the gene identifiers and expression preprocessing are compatible.
+
+### 1. Pseudobulk generation
+
+**Input**
+
+LEDC's `generate_pseudobulk()` function accepts an annotated single-cell RNA-seq dataset stored as an `AnnData` object.
+
+The input should contain:
+
+- `adata.X`: Single-cell gene-expression matrix, with cells as rows and genes as columns. Raw counts are recommended for count-based pseudobulk generation.
+- `adata.obs["cell_type"]`: Cell-type annotation for each cell.
+- `adata.var_names`: Gene identifiers, such as Ensembl IDs or gene symbols.
+- `cell_types`: List of cell types to include in the simulated mixtures.
+
+Users also specify the number of pseudobulk samples, the prediction mode, and the random-number generator.
+
+**Output**
+
+The function returns three matrices:
+
+| Matrix | Dimensions | Description |
+|---|---|---|
+| `T` | Samples × Genes | Synthetic pseudobulk gene expression, obtained by summing the expression of sampled cells |
+| `C` | Samples × Cell types | Actual number of sampled cells from each cell type |
+| `P` | Samples × Cell types | Prediction targets determined by the selected generation mode |
+
+The expression matrix `T` is returned as a SciPy sparse matrix, while `C` and `P` are pandas DataFrames.
+
+Two prediction modes are supported:
+
+- **Count mode (`mode="count"`):** The total number of cells is sampled from a Poisson distribution, and `P = C`.
+- **Proportion mode (`mode="proportion"`):** Each mixture contains a fixed number of cells, and `P` contains realized cell-type proportions, calculated as `C / row_sum(C)`.
+
+### 2. LEDC model training
+
+**Input**
+
+Training requires two aligned pandas DataFrames:
+
+- `X_train`: Gene-expression matrix with training samples as rows and genes as columns.
+- `Y_train`: Ground-truth cell-type counts or proportions, with the same samples as rows and cell types as columns.
+
+The rows of `X_train` and `Y_train` must correspond to the same samples.
+
+When training on LEDC-generated pseudobulk data, the expression matrix `T` is used as `X_train`, and `P` is used as `Y_train`.
+
+The prediction target is selected using:
+
+- `LEDC(target="count")` for cell-type count prediction.
+- `LEDC(target="proportion")` for cell-type proportion prediction.
+
+**Output**
+
+LEDC fits one LightGBM regression model per cell type. Each model learns the relationship between mixed gene expression and the abundance of a particular cell type.
+
+The trained models can be saved to disk and subsequently loaded for prediction without retraining.
+
+### 3. Cell-type abundance prediction
+
+**Input**
+
+For prediction, users provide a gene-expression matrix from new bulk RNA-seq samples or spatial transcriptomics spots.
+
+The input can be:
+
+- A pandas DataFrame (`X_new`), with samples or spots as rows and genes as columns.
+- An AnnData object, using the `predict_adata()` method.
+
+Gene identifiers should be consistent with those used for model training. LEDC aligns input genes with the training features. Missing genes can either raise an error or be explicitly filled with zeros.
+
+The new expression data should use preprocessing compatible with the training data.
+
+**Output**
+
+LEDC returns a pandas DataFrame containing predicted cell-type abundances.
+
+| Sample | B cell | T cell | Macrophage |
+|---|---:|---:|---:|
+| Sample 1 | 2.4 | 4.8 | 1.2 |
+| Sample 2 | 1.1 | 3.6 | 2.3 |
+| Sample 3 | 3.2 | 2.1 | 0.8 |
+
+*Illustrative count-mode predictions; these are not benchmark results.*
+
+Each row corresponds to a sample or spatial spot, and each column corresponds to a cell type.
+
+For count-based models, the values represent predicted cell counts. Because LEDC uses regression, predicted counts are continuous estimates and are not necessarily integers.
+
+For proportion-based models, the values represent predicted cell-type proportions. Optional normalization can be applied when predictions must sum to one.
+
+Predictions can be exported as CSV files for downstream analysis or visualized as spatial cell-type abundance maps.
+
+### Important notes
+
+- A single-cell reference is required for pseudobulk generation, but not for prediction with an already trained model.
+- Ground-truth cell-type labels are required for supervised training, but not for prediction on new samples.
+- LEDC supports both count and proportion prediction; users should select the target that matches their application.
+- Donor-disjoint training and testing require separate reference datasets or donor-level filtering before pseudobulk generation.
+- LEDC does not automatically normalize gene expression to match the training data. Users should ensure compatible input preprocessing.
+
+### Quick Example: Using LEDC with Your Own Data
+
+```python
+import anndata as ad
+import numpy as np
+import pandas as pd
+from ledc import LEDC, generate_pseudobulk
+
+# 1. Input: annotated single-cell reference
+adata = ad.read_h5ad("reference.h5ad")
+cell_types = sorted(adata.obs["cell_type"].unique())
+
+# 2. Generate pseudobulk training data
+T, C, P = generate_pseudobulk(
+    adata=adata,
+    n_samples=500,
+    cell_types=cell_types,
+    rng=np.random.default_rng(42),
+    mode="count",
+    poisson_mean=10
+)
+
+# Convert T to a DataFrame (suitable for small examples)
+X_train = pd.DataFrame(
+    T.toarray(),
+    columns=adata.var_names
+)
+
+# 3. Train LEDC
+model = LEDC(target="count", expression_scale="raw_counts")
+model.fit(X_train, P)
+
+# 4. Save the trained model
+model.save("ledc_count_model")
+
+# 5. Input: expression data from new samples
+# Rows = samples, columns = genes
+X_new = pd.read_csv("new_expression.csv", index_col=0)
+
+# 6. Output: predicted cell-type counts
+predictions = model.predict(X_new)
+
+predictions.to_csv("predicted_cell_counts.csv")
+
+```
+
 ## Example: Running LEDC on Synthetic Data
 
-A reproducible demonstration is provided in [`examples/demo_ledc.py`](examples/demo_ledc.py). This example illustrates the complete LEDC workflow using simulated single-cell RNA-seq data with three cell types: B cells, T cells, and macrophages.
+A reproducible example is available in [`examples/demo_ledc.py`](examples/demo_ledc.py). The demo uses simulated single-cell RNA-seq data containing three cell types (B cells, T cells, and macrophages) to demonstrate the complete LEDC workflow.
 
-The demo generates pseudobulk mixtures, trains independent LightGBM models for cell-type count prediction, and evaluates the predictions on held-out synthetic samples.
+The example generates pseudobulk training data, fits LightGBM models for cell-type count prediction, and evaluates predictions on synthetic test samples.
+
+To run the example after installing LEDC:
+
+```bash
+python examples/demo_ledc.py
+```
+
+See the example script for the complete implementation.
 
 ### Run the demo
 
