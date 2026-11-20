@@ -515,7 +515,7 @@ def plot_spatial(
     axes = axes.ravel()
     scatter_plots = []
 
-    # 8. Plot each cell type
+   # 8. Plot each cell type
     for i, cell_type in enumerate(cell_types):
         ax = axes[i]
         v = values[:, i]
@@ -554,25 +554,20 @@ def plot_spatial(
         ax.invert_yaxis()
         ax.axis("off")
 
-        if scale == "individual":
-            fig.colorbar(
-                sc,
-                ax=ax,
-                shrink=0.7
-            )
+        # Always display one colorbar per subplot
+        cbar = fig.colorbar(
+            sc,
+            ax=ax,
+            fraction=0.046,
+            pad=0.02,
+            shrink=0.85
+        )
+
+        cbar.ax.tick_params(labelsize=8)
 
     # 9. Hide unused subplots
     for ax in axes[n:]:
         ax.set_visible(False)
-
-    # 10. Shared colorbar
-    if scale == "shared":
-        fig.colorbar(
-            scatter_plots[0],
-            ax=list(axes[:n]),
-            shrink=0.7,
-            label="Predicted abundance"
-        )
 
     # Save the figure if requested
     if save_path is not None:
