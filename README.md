@@ -1,4 +1,4 @@
-# LEDC: LightGBM Ensemble DeConvolution
+# LEDC: LightGBM Ensembled DeConvolution
 
 **LEDC** is a supervised machine-learning method for estimating cell-type abundance from bulk RNA sequencing and spatial transcriptomics data.
 
